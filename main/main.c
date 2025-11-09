@@ -3,10 +3,73 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lidar.h"
+#include "nrf24_comm.h"
 
 static const char *TAG = "OBC_MAIN";
 
 void app_main(void) {
+    // Create and configure NRF24 structure
+    nrf24_t nrf24 = {
+        // SPI Configuration
+        .spi_host = SPI3_HOST,     // VSPI on ESP32
+        .miso_gpio = 19,           // From your menuconfig
+        .mosi_gpio = 23,           // From your menuconfig
+        .sclk_gpio = 18,           // From your menuconfig
+        .ce_gpio = 21,             // From your menuconfig
+        .csn_gpio = 5,             // From your menuconfig
+        
+        // Radio Configuration
+        .channel = 90,             // RF Channel (0-125)
+        .payload_size = 16,        // Size of payload (1-32 bytes)
+        .tx_address = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7},  // Match receiver
+        .rx_address = {0xD2, 0xD2, 0xD2, 0xD2, 0xD2}   // For receiving (if needed)
+    };
+    
+    // Initialize NRF24L01 module
+    esp_err_t ret = nrf24_init(&nrf24);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize NRF24L01: %d", ret);
+        return;
+    }
+    
+    // Print NRF24L01 details
+    nrf24_print_details(&nrf24);
+    
+    // Set maximum power
+    nrf24_set_power(&nrf24, NRF24_PA_MAX);
+    
+    // Test message
+    char message[] = "Hello from ESP32!";
+    uint8_t tx_buffer[nrf24.payload_size];
+    
+    // Fill buffer with zeros
+    memset(tx_buffer, 0, nrf24.payload_size);
+    
+    // Copy message into buffer (truncate if necessary)
+    size_t message_len = strlen(message);
+    if (message_len > nrf24.payload_size) {
+        message_len = nrf24.payload_size;
+    }
+    memcpy(tx_buffer, message, message_len);
+    
+    // Main loop to send message every second
+    while (1) {
+        ESP_LOGI(TAG, "Sending message: %s", message);
+        
+        ret = nrf24_send(&nrf24, tx_buffer, 1000);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Message sent successfully");
+        } else if (ret == ESP_ERR_TIMEOUT) {
+            ESP_LOGW(TAG, "Send timeout");
+        } else {
+            ESP_LOGE(TAG, "Failed to send message: %d", ret);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+/*void app_main(void) {
     ESP_LOGI(TAG, "Starting Car OBC Main Application");
 
     if (init_lidar() != ESP_OK) {
@@ -16,8 +79,8 @@ void app_main(void) {
         }
     }
 
-    // Allocate buffer for lidar scan data, adjust size as needed
-    uint8_t *scan_data = (uint8_t *)malloc(2048); // 2KB buffer, actual size is like 1.4KB but ye
+    // Allocate buffer for lidar scan data
+    uint8_t *scan_data = (uint8_t *)malloc(2048); // 2KB buffer, actual size is like 1.5KB but ye
 
     if (scan_data == NULL) {
         ESP_LOGE(TAG, "Failed to allocate buffer for scan data");
@@ -47,3 +110,4 @@ void app_main(void) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
+*/

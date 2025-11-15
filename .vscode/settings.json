@@ -3,8 +3,7 @@
   "idf.espIdfPathWin": "C:\\Users\\joete\\esp\\v5.5.1\\esp-idf",
   "idf.pythonInstallPath": "/opt/homebrew/bin/python3",
   "idf.openOcdConfigs": [
-    "interface/ftdi/esp_ftdi.cfg",
-    "target/esp32.cfg"
+    "board/esp32-wrover-kit-3.3v.cfg"
   ],
   "idf.portWin": "COM4",
   "idf.toolsPathWin": "C:\\Users\\joete\\.espressif",
@@ -20,6 +19,10 @@
   "idf.flashType": "UART",
   "idf.port": "/dev/tty.usbserial-1130",
   "files.associations": {
-    "spi_master.h": "c"
+    "spi_master.h": "c",
+    "task.h": "c",
+    "spi_common.h": "c",
+    "rf24.h": "c",
+    "rf24_wrapper.h": "c"
   }
 }

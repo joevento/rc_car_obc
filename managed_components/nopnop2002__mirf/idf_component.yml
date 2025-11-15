@@ -1,7 +1,0 @@
-dependencies:
-  idf:
-    version: ">=4.4"
-  esp_driver_spi:
-    version: "*"
-  esp_driver_gpio:
-    version: "*"

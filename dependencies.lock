@@ -3,17 +3,8 @@ dependencies:
     source:
       type: idf
     version: 6.0.0
-  nopnop2002/mirf:
-    component_hash: 
-      802646e84e4308d94212942942fcf7882d94a09c14e7d0e812e49be7609aeacd
-    dependencies: []
-    source:
-      git: https://github.com/nopnop2002/esp-idf-mirf.git
-      path: components/mirf/
-      type: git
-    version: 41af495a5830c3417d4c889f4e8b25496a445d54
 direct_dependencies:
-- nopnop2002/mirf
-manifest_hash: 72dc2ca7787eb8f2587b4bb95934c9d44537c55713e270182d23596d3ef6bb90
+- idf
+manifest_hash: b7d3fdaa5c1bf29e919f72790a606b6ac554e5ace8394106b1bf80dac02d8421
 target: esp32
 version: 2.0.0

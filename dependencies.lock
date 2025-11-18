@@ -2,7 +2,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 6.0.0
+    version: 5.5.1
 direct_dependencies:
 - idf
 manifest_hash: b7d3fdaa5c1bf29e919f72790a606b6ac554e5ace8394106b1bf80dac02d8421

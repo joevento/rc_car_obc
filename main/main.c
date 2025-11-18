@@ -18,23 +18,28 @@ void app_main(void) {
     rf24_set_channel(108);
     rf24_print_details();
 
-    uint8_t rx_buffer[32];
-    ESP_LOGI(TAG, "Receiver ready on channel 108...");
+    ESP_LOGI(TAG, "Sender ready on channel 108...");
 
-    while (1) {
-        esp_err_t ret = nrf24_receive(rx_buffer, sizeof(rx_buffer));
-
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Received %d bytes:", (int)sizeof(rx_buffer));
-            for (int i = 0; i < sizeof(rx_buffer); i++) {
-                printf("%02X ", rx_buffer[i]);
-            }
-            printf("\nAs text: %.*s\n", (int)sizeof(rx_buffer), (char *)rx_buffer);
+    while (true) {
+        // Generate test data
+        uint8_t test_data[32];
+        for (int i = 0; i < sizeof(test_data); i++) {
+            test_data[i] = i;  // predictable bytes 0..31
         }
-        ESP_LOGI(TAG, "%s", esp_err_to_name(ret));
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // Send data
+        esp_err_t result = nrf24_send(test_data, sizeof(test_data));
+
+        if (result == ESP_OK) {
+            ESP_LOGI(TAG, "Sent 32 bytes successfully");
+        } else {
+            ESP_LOGW(TAG, "Failed to send data: %s", esp_err_to_name(result));
+        }
+
+        // Wait before next send
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
+    
 }
 
 /*void app_main(void) {

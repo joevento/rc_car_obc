@@ -84,28 +84,28 @@ esp_err_t motor_init() {
 
 void motorA_control(int speed, bool direction) {
 
-  ledc_set_duty(LEDC_LOW_SPEED_MODE, motorAChannel, speed);
-  ledc_update_duty(LEDC_LOW_SPEED_MODE, motorAChannel);
+	ledc_set_duty(LEDC_LOW_SPEED_MODE, motorAChannel, speed);
+	ledc_update_duty(LEDC_LOW_SPEED_MODE, motorAChannel);
 
-  if (direction) { // Forward
-    gpio_set_level(AIN1_PIN, 1);
-    gpio_set_level(AIN2_PIN, 0);
-  } else { // Reverse
-    gpio_set_level(AIN1_PIN, 0);
-    gpio_set_level(AIN2_PIN, 1);
-  }
+	if (direction) { // Forward
+		gpio_set_level(AIN1_PIN, 1);
+		gpio_set_level(AIN2_PIN, 0);
+	} else { // Reverse
+		gpio_set_level(AIN1_PIN, 0);
+		gpio_set_level(AIN2_PIN, 1);
+	}
 }
 
 void motorB_control(int speed, bool direction) {
 
-  ledc_set_duty(LEDC_LOW_SPEED_MODE, motorBChannel, speed);
-  ledc_update_duty(LEDC_LOW_SPEED_MODE, motorBChannel);
+	ledc_set_duty(LEDC_LOW_SPEED_MODE, motorBChannel, speed);
+	ledc_update_duty(LEDC_LOW_SPEED_MODE, motorBChannel);
 
-  if (direction) { // Forward
-    gpio_set_level(BIN1_PIN, 1);
-    gpio_set_level(BIN2_PIN, 0);
-  } else { // Reverse
-    gpio_set_level(BIN1_PIN, 0);
-    gpio_set_level(BIN2_PIN, 1);
-  }
+	if (direction) { // Forward
+		gpio_set_level(BIN1_PIN, 1);
+		gpio_set_level(BIN2_PIN, 0);
+	} else { // Reverse
+		gpio_set_level(BIN1_PIN, 0);
+		gpio_set_level(BIN2_PIN, 1);
+	}
 }

@@ -31,6 +31,7 @@ bool rf24_is_chip_connected(void);
 
 // --- Configuration ---
 esp_err_t rf24_set_channel(uint8_t channel);
+uint8_t rf24_get_channel();
 esp_err_t rf24_set_payload_size(uint8_t size);
 esp_err_t rf24_set_retries(uint8_t delay, uint8_t count);
 esp_err_t rf24_set_data_rate(rf24_datarate_t rate);

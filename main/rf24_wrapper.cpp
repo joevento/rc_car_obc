@@ -26,6 +26,10 @@ esp_err_t rf24_set_channel(uint8_t channel) {
     return ESP_OK;
 }
 
+uint8_t rf24_get_channel() {
+    return radio->getChannel();;
+}
+
 esp_err_t rf24_set_payload_size(uint8_t size) {
     if (!radio) return ESP_ERR_INVALID_STATE;
     radio->setPayloadSize(size);

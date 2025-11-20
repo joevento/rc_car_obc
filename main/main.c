@@ -9,10 +9,18 @@
 
 static const char *TAG = "OBC_MAIN";
 
+// debug mode flag
+#define DEBUG
+
 void app_main(void) {
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "===== Debug mode enabled =====");
+    #endif
+
+    // Motor things
     motor_init();
     ESP_LOGI(TAG, "SparkFun Dual TB6612FNG ESP32 setup complete.");
-    
+    /*
     while (1) {
         ESP_LOGI(TAG, "Motor A Forward, Motor B Forward");
         motorA_control(200, true);
@@ -38,46 +46,41 @@ void app_main(void) {
         motorA_control(120, false);
         motorB_control(120, true);
         vTaskDelay(pdMS_TO_TICKS(2000));
+    }*/
+
+    // Radio things
+   esp_err_t ret = nrf24_init();
+   if (ret != ESP_OK) {
+       ESP_LOGE(TAG, "Failed to initialize nrf24");
+       return;
+    }
+    ESP_LOGI(TAG, "Ready on channel %d...", rf24_get_channel());
+    
+    while (true) {
+        // Generate test data
+        uint8_t test_data[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
+        
+        // Send data
+        esp_err_t result = nrf24_send(test_data, sizeof(test_data));
+        
+        if (result == ESP_OK) {
+            ESP_LOGI(TAG, "Sent %d bytes successfully", sizeof(test_data));
+        } else {
+            ESP_LOGW(TAG, "Failed to send data: %s", esp_err_to_name(result));
+        }
+        
+        // Wait before next send
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
-/*esp_err_t ret = nrf24_init();
-if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize nrf24");
-    return;
-}
-// Change channel before starting to listen
-rf24_set_channel(108);
-rf24_print_details();
-
-ESP_LOGI(TAG, "Sender ready on channel 108...");
-
-while (true) {
-    // Generate test data
-    uint8_t test_data[32];
-    for (int i = 0; i < sizeof(test_data); i++) {
-        test_data[i] = i;  // predictable bytes 0..31
-    }
-
-    // Send data
-    esp_err_t result = nrf24_send(test_data, sizeof(test_data));
-
-    if (result == ESP_OK) {
-        ESP_LOGI(TAG, "Sent 32 bytes successfully");
-    } else {
-        ESP_LOGW(TAG, "Failed to send data: %s", esp_err_to_name(result));
-    }
-
-    // Wait before next send
-    vTaskDelay(pdMS_TO_TICKS(500));
-}*/
-
-/*void app_main(void) {
-    ESP_LOGI(TAG, "Starting Car OBC Main Application");
-
-    if (init_lidar() != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize LIDAR");
-        while (1) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    /*void app_main(void) {
+        ESP_LOGI(TAG, "Starting Car OBC Main Application");
+        
+        if (init_lidar() != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize LIDAR");
+            while (1) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 

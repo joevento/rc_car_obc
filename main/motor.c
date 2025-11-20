@@ -35,52 +35,51 @@ const int resolution = 8;
 const ledc_channel_t motorAChannel = LEDC_CHANNEL_0;
 const ledc_channel_t motorBChannel = LEDC_CHANNEL_1;
 
-void motor_init() {
-  // Configure GPIOs for motor control
-  gpio_config_t io_conf = {};
-  io_conf.intr_type = GPIO_INTR_DISABLE;
-  io_conf.mode = GPIO_MODE_OUTPUT;
-  io_conf.pin_bit_mask =
-      (1ULL << AIN1_PIN) | (1ULL << AIN2_PIN) | (1ULL << BIN1_PIN) |
-      (1ULL << BIN2_PIN) | (1ULL << STBY_PIN);
-  io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-  gpio_config(&io_conf);
+esp_err_t motor_init() {
+	// Configure GPIOs for motor control
+	gpio_config_t io_conf = {};
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask =
+		(1ULL << AIN1_PIN) | (1ULL << AIN2_PIN) | (1ULL << BIN1_PIN) |
+		(1ULL << BIN2_PIN) | (1ULL << STBY_PIN);
+	io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
 
-  // Set standby pin high to enable the motor driver
-  gpio_set_level(STBY_PIN, 1);
+	// Set standby pin high to enable the motor driver
+	gpio_set_level(STBY_PIN, 1);
 
-  // Configure LEDC for PWM
-  ledc_timer_config_t ledc_timer = {
-      .speed_mode = LEDC_LOW_SPEED_MODE,
-      .timer_num = LEDC_TIMER_0,
-      .duty_resolution = resolution,
-      .freq_hz = freq,
-      .clk_cfg = LEDC_AUTO_CLK,
-  };
-  ledc_timer_config(&ledc_timer);
+	// Configure LEDC for PWM
+	ledc_timer_config_t ledc_timer = {
+		.speed_mode = LEDC_LOW_SPEED_MODE,
+		.timer_num = LEDC_TIMER_0,
+		.duty_resolution = resolution,
+		.freq_hz = freq,
+		.clk_cfg = LEDC_AUTO_CLK,
+	};
+	ledc_timer_config(&ledc_timer);
 
-  ledc_channel_config_t ledc_channel_a = {
-      .speed_mode = LEDC_LOW_SPEED_MODE,
-      .channel = motorAChannel,
-      .timer_sel = LEDC_TIMER_0,
-      .intr_type = LEDC_INTR_DISABLE,
-      .gpio_num = PWMA_PIN,
-      .duty = 0,
-      .hpoint = 0,
-  };
-  ledc_channel_config(&ledc_channel_a);
+	ledc_channel_config_t ledc_channel_a = {
+		.speed_mode = LEDC_LOW_SPEED_MODE,
+		.channel = motorAChannel,
+		.timer_sel = LEDC_TIMER_0,
+		.intr_type = LEDC_INTR_DISABLE,
+		.gpio_num = PWMA_PIN,
+		.duty = 0,
+		.hpoint = 0,
+	};
+	ledc_channel_config(&ledc_channel_a);
 
-  ledc_channel_config_t ledc_channel_b = {
-      .speed_mode = LEDC_LOW_SPEED_MODE,
-      .channel = motorBChannel,
-      .timer_sel = LEDC_TIMER_0,
-      .intr_type = LEDC_INTR_DISABLE,
-      .gpio_num = PWMB_PIN,
-      .duty = 0,
-      .hpoint = 0,
-  };
-  ledc_channel_config(&ledc_channel_b);
+	ledc_channel_config_t ledc_channel_b = {
+		.speed_mode = LEDC_LOW_SPEED_MODE,
+		.channel = motorBChannel,
+		.timer_sel = LEDC_TIMER_0,
+		.intr_type = LEDC_INTR_DISABLE,
+		.gpio_num = PWMB_PIN,
+		.duty = 0,
+		.hpoint = 0,
+	};
+	ledc_channel_config(&ledc_channel_b);
 }
 
 void motorA_control(int speed, bool direction) {

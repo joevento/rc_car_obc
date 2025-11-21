@@ -57,6 +57,13 @@ esp_err_t rf24_flush_rx(void);
 // --- Debugging ---
 void rf24_print_details(void);
 
+// --- Dynamic payloads and ACK payloads ---
+esp_err_t rf24_enable_dynamic_payloads(void);
+esp_err_t rf24_disable_dynamic_payloads(void);
+esp_err_t rf24_enable_ack_payload(void);
+bool rf24_is_ack_payload_available(void);
+esp_err_t rf24_read_ack_payload(uint8_t *data, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

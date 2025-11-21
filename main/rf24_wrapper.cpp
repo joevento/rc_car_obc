@@ -27,7 +27,7 @@ esp_err_t rf24_set_channel(uint8_t channel) {
 }
 
 uint8_t rf24_get_channel() {
-    return radio->getChannel();;
+    return radio ? radio->getChannel() : 0;
 }
 
 esp_err_t rf24_set_payload_size(uint8_t size) {
@@ -151,4 +151,34 @@ bool rf24_is_chip_connected(void) {
 
 void rf24_print_details(void) {
     if (radio) radio->printDetails();
+}
+
+esp_err_t rf24_enable_dynamic_payloads(void) {
+    if (!radio) return ESP_ERR_INVALID_STATE;
+    radio->enableDynamicPayloads();
+    return ESP_OK;
+}
+
+esp_err_t rf24_disable_dynamic_payloads(void) {
+    if (!radio) return ESP_ERR_INVALID_STATE;
+    radio->disableDynamicPayloads();
+    return ESP_OK;
+}
+
+esp_err_t rf24_enable_ack_payload(void) {
+    if (!radio) return ESP_ERR_INVALID_STATE;
+    radio->enableAckPayload();
+    return ESP_OK;
+}
+
+bool rf24_is_ack_payload_available(void) {
+    if (!radio) return false;
+    return radio->isAckPayloadAvailable();
+}
+
+esp_err_t rf24_read_ack_payload(uint8_t *data, size_t length) {
+    if (!radio) return ESP_ERR_INVALID_STATE;
+    if (!radio->isAckPayloadAvailable()) return ESP_ERR_NOT_FOUND;
+    radio->read(data, length);
+    return ESP_OK;
 }

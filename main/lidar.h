@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-esp_err_t init_lidar(void);
+esp_err_t lidar_init(void);
 esp_err_t get_lidar_scan_data(uint8_t *buffer, size_t buffer_size,
                               size_t *read_len);
 

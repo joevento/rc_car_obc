@@ -25,7 +25,7 @@
 const uint8_t START_SCAN_COMMAND[] = {0xA5, 0x20};
 const size_t START_SCAN_COMMAND_LEN = sizeof(START_SCAN_COMMAND);
 
-static const char *TAG = "OBC_LIDAR";
+static const char *TAG = "Lidar";
 
 // Internal function to set motor speed
 static void set_motor_speed(uint32_t speed_percentage) {
@@ -38,8 +38,12 @@ static void set_motor_speed(uint32_t speed_percentage) {
     ESP_LOGI(TAG, "Motor speed set to %lu%% (duty: %lu)", speed_percentage, duty);
 }
 
-esp_err_t init_lidar(void) {
-    // UART2 for communicating with lidar
+esp_err_t lidar_init(void) {
+	ESP_LOGI(TAG, "Initializing lidar.");
+    
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Initializing UART.");
+    #endif
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -48,25 +52,17 @@ esp_err_t init_lidar(void) {
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_APB,
     };
-    esp_err_t err = uart_driver_install(UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(err));
-        return err;
-    }
-    err = uart_param_config(UART_NUM, &uart_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure UART parameters: %s", esp_err_to_name(err));
-        return err;
-    }
-    err = uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE,
-                       UART_PIN_NO_CHANGE);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    ESP_LOGI(TAG, "UART initialized for RPLIDAR");
-
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE,
+                       UART_PIN_NO_CHANGE));
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "UART initialized.");
+    #endif
+    
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Initializing motor PWM.");
+    #endif
     // PWM for motor control
     ledc_timer_config_t ledc_timer = {
         .speed_mode = LEDC_MODE,
@@ -75,12 +71,8 @@ esp_err_t init_lidar(void) {
         .freq_hz = LEDC_FREQUENCY,
         .clk_cfg = LEDC_APB_CLK,
     };
-    err = ledc_timer_config(&ledc_timer);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure LEDC timer: %s", esp_err_to_name(err));
-        return err;
-    }
-
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    
     ledc_channel_config_t ledc_channel = {
         .speed_mode = LEDC_MODE,
         .channel = LEDC_CHANNEL,
@@ -89,19 +81,24 @@ esp_err_t init_lidar(void) {
         .gpio_num = MOTOR_CTRL_PIN,
         .duty = 0,
         .hpoint = 0};
-    err = ledc_channel_config(&ledc_channel);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure LEDC channel: %s", esp_err_to_name(err));
-        return err;
-    }
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "PWM initialized.");
+    #endif
 
-    // Start the motor
-    ESP_LOGI(TAG, "Starting motor...");
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Starting up motor.");
+    #endif
     set_motor_speed(100);
     ESP_LOGI(TAG, "Waiting for motor to reach constant rotation rate.");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Critical wait because if the motor isnt spinning at a constant rate the next command fails and im too lazy to make proper code.
+    vTaskDelay(pdMS_TO_TICKS(2000)); // Critical wait because if the motor isnt spinning at a constant rate the next command fails and im too lazy to make proper code.
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Motor at constant speed.");
+    #endif
 
-    // Send the start scan command
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Starting scanning.");
+    #endif
     int bytes_written =
         uart_write_bytes(UART_NUM, (const char *)START_SCAN_COMMAND,
                          START_SCAN_COMMAND_LEN);
@@ -110,8 +107,13 @@ esp_err_t init_lidar(void) {
                  bytes_written, START_SCAN_COMMAND_LEN);
         return ESP_FAIL;
     }
-    ESP_LOGI(TAG, "Sent START_SCAN command.");
-    // Look for the descriptor pattern A5 5A in the incoming stream
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Started scanning.");
+    #endif
+    
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Validating startup.");
+    #endif
     uint8_t data_byte;
     int pattern_idx = 0;
     uint8_t response_descriptor[7];
@@ -145,11 +147,15 @@ esp_err_t init_lidar(void) {
             }
         }
     }
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Scanning successfully.");
+    #endif
 
-    ESP_LOGI(TAG, "Received valid scan descriptor. LIDAR is now continuously scanning.");
+    ESP_LOGI(TAG, "Initialized.");
     return ESP_OK;
 }
 
+// could maybe add debug logs to this but ehh should be fine
 esp_err_t get_lidar_scan_data(uint8_t *buffer, size_t buffer_size, size_t *read_len) {
     if (buffer == NULL || read_len == NULL || buffer_size == 0) {
         return ESP_ERR_INVALID_ARG;
@@ -160,8 +166,6 @@ esp_err_t get_lidar_scan_data(uint8_t *buffer, size_t buffer_size, size_t *read_
     bool found_first_start = false;
     size_t packet_count = 0;
     TickType_t start_time = xTaskGetTickCount();
-
-    ESP_LOGI(TAG, "Waiting for start of new scan (S=1)...");
 
     while (1) {
         if ((xTaskGetTickCount() - start_time) > pdMS_TO_TICKS(5000)) {
@@ -177,7 +181,6 @@ esp_err_t get_lidar_scan_data(uint8_t *buffer, size_t buffer_size, size_t *read_
             if (!found_first_start) {
                 if (is_start_of_scan) {
                     found_first_start = true;
-                    ESP_LOGI(TAG, "Found start of scan, collecting data...");
                     
                     if (*read_len + 5 <= buffer_size) {
                         memcpy(buffer + *read_len, packet, 5);
@@ -190,8 +193,6 @@ esp_err_t get_lidar_scan_data(uint8_t *buffer, size_t buffer_size, size_t *read_
                 }
             } else {
                 if (is_start_of_scan) {
-                    ESP_LOGI(TAG, "Found next scan start. Collected %d packets (%d bytes)",
-                             packet_count, *read_len);
                     return ESP_OK;
                 }
 

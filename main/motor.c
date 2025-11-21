@@ -1,20 +1,7 @@
-/* 
-Ai1 = 12
-Ai2 = 14
-PWMA = 34
-
-Bi1 = 26
-Bi2 = 25
-PWMB = 35
-
-standby = 27
-*/
-
-// motor.c
-// components/motor/motor.c
-#include "motor.h"
+#include "esp_log.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "motor.h"
 
 // Motor A
 #define AIN1_PIN 12
@@ -35,7 +22,10 @@ const int resolution = 8;
 const ledc_channel_t motorAChannel = LEDC_CHANNEL_0;
 const ledc_channel_t motorBChannel = LEDC_CHANNEL_1;
 
+static const char *TAG = "Motor";
+
 esp_err_t motor_init() {
+	ESP_LOGI(TAG, "Initializing motor driver.");
 	// Configure GPIOs for motor control
 	gpio_config_t io_conf = {};
 	io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -47,9 +37,10 @@ esp_err_t motor_init() {
 	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
 
 	// Set standby pin high to enable the motor driver
-	gpio_set_level(STBY_PIN, 1);
+	ESP_ERROR_CHECK(gpio_set_level(STBY_PIN, 1));
+	ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-	// Configure LEDC for PWM
+	// Configure LEDC timer for PWM
 	ledc_timer_config_t ledc_timer = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
 		.timer_num = LEDC_TIMER_0,
@@ -57,7 +48,7 @@ esp_err_t motor_init() {
 		.freq_hz = freq,
 		.clk_cfg = LEDC_AUTO_CLK,
 	};
-	ledc_timer_config(&ledc_timer);
+	ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
 	ledc_channel_config_t ledc_channel_a = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
@@ -68,7 +59,7 @@ esp_err_t motor_init() {
 		.duty = 0,
 		.hpoint = 0,
 	};
-	ledc_channel_config(&ledc_channel_a);
+	ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel_a));
 
 	ledc_channel_config_t ledc_channel_b = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
@@ -79,10 +70,13 @@ esp_err_t motor_init() {
 		.duty = 0,
 		.hpoint = 0,
 	};
-	ledc_channel_config(&ledc_channel_b);
+	ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel_b));
+	
+    ESP_LOGI(TAG, "Motor controller initialized.");
+	return ESP_OK;
 }
 
-void motorA_control(int speed, bool direction) {
+esp_err_t motorA_control(int speed, bool direction) {
 
 	ledc_set_duty(LEDC_LOW_SPEED_MODE, motorAChannel, speed);
 	ledc_update_duty(LEDC_LOW_SPEED_MODE, motorAChannel);
@@ -94,9 +88,11 @@ void motorA_control(int speed, bool direction) {
 		gpio_set_level(AIN1_PIN, 0);
 		gpio_set_level(AIN2_PIN, 1);
 	}
+
+	return ESP_OK;
 }
 
-void motorB_control(int speed, bool direction) {
+esp_err_t motorB_control(int speed, bool direction) {
 
 	ledc_set_duty(LEDC_LOW_SPEED_MODE, motorBChannel, speed);
 	ledc_update_duty(LEDC_LOW_SPEED_MODE, motorBChannel);
@@ -108,4 +104,6 @@ void motorB_control(int speed, bool direction) {
 		gpio_set_level(BIN1_PIN, 0);
 		gpio_set_level(BIN2_PIN, 1);
 	}
+
+	return ESP_OK;
 }

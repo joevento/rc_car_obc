@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -28,10 +29,57 @@ static QueueHandle_t lidar_data_queue = NULL;
 
 // Lidar data fragments
 typedef struct {
-    uint8_t fragment_id; // Unique ID for each fragment within a full scan
-    bool is_last_fragment; // True if this is the last fragment of the scan
-    uint8_t fragment_data[32 - sizeof(uint8_t) - sizeof(bool)]; // Actual data
-} nrf_fragment_t;
+    uint8_t magic;       // 0xA7
+    uint8_t version;     // 0x01
+    uint8_t scan_id;     // increments per full scan
+    uint8_t fragment_id; // increments per fragment
+    uint8_t flags;       // bit0: is_last
+    uint8_t payload_len; // 0..24
+    uint16_t crc;        // CRC16-CCITT over header-with-zeroed-crc + payload
+    uint8_t payload[24];
+} __attribute__((packed)) rf_frame_t;
+
+// CRC16-CCITT (poly 0x1021, init 0xFFFF, no reflect, no xorout)
+static uint16_t crc16_ccitt(const uint8_t *data, size_t len) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (int b = 0; b < 8; b++) {
+            if (crc & 0x8000) {
+                crc = (uint16_t)((crc << 1) ^ 0x1021);
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    return crc;
+}
+
+static uint16_t compute_frame_crc(const rf_frame_t *fr) {
+    rf_frame_t tmp = *fr;
+    tmp.crc = 0;
+    size_t len = offsetof(rf_frame_t, payload) + tmp.payload_len;
+    return crc16_ccitt((const uint8_t *)&tmp, len);
+}
+
+// Hook: apply ACK-payload motor commands when they arrive from the receiver
+void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
+    if (!data || length < sizeof(motor_command_t)) return;
+
+    static motor_command_t last_cmd = {255, 0, 255, 0};
+    motor_command_t cmd;
+    memcpy(&cmd, data, sizeof(motor_command_t));
+
+    if (memcmp(&cmd, &last_cmd, sizeof(cmd)) == 0) return;
+    last_cmd = cmd;
+
+    ESP_LOGI(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
+             cmd.motor_a_speed, cmd.motor_a_direction,
+             cmd.motor_b_speed, cmd.motor_b_direction);
+
+    motorA_control(cmd.motor_a_speed, cmd.motor_a_direction);
+    motorB_control(cmd.motor_b_speed, cmd.motor_b_direction);
+}
 
 void lidar_scan_task(void *pvParameters) {
     lidar_packet_t lidar_packet;
@@ -43,16 +91,17 @@ void lidar_scan_task(void *pvParameters) {
             #ifdef DEBUG
                 ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.", lidar_packet.length);
             #endif
-            // Send the acquired LIDAR packet to the queue
-            if (xQueueSend(lidar_data_queue, &lidar_packet, portMAX_DELAY) != pdPASS) {
-                ESP_LOGE(TAG, "Failed to send LIDAR data to queue.");
+            if (xQueueSend(lidar_data_queue, &lidar_packet, 0) != pdPASS) {
+                // Queue full -> drop newest scan (choose overwrite policy if desired)
+                // lidar_packet_t drop;
+                // xQueueReceive(lidar_data_queue, &drop, 0);
+                // xQueueSend(lidar_data_queue, &lidar_packet, 0);
             }
         } else if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error getting lidar scan data: %s", esp_err_to_name(err));
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
-    vTaskDelete(NULL);
 }
 
 static void lidar_init_handler(void){
@@ -99,20 +148,6 @@ static void debugWheels(void){
     vTaskDelay(pdMS_TO_TICKS(2000));
 }
 
-static motor_command_t last_cmd = {255, 0, 255, 0}; // impossible init to force first apply
-
-void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
-    if (!data || length < sizeof(motor_command_t)) return;
-    motor_command_t cmd;
-    memcpy(&cmd, data, sizeof(cmd));
-    if (memcmp(&cmd, &last_cmd, sizeof(cmd)) == 0) return; // no change, skip
-    last_cmd = cmd;
-    ESP_LOGI(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
-             cmd.motor_a_speed, cmd.motor_a_direction,
-             cmd.motor_b_speed, cmd.motor_b_direction);
-    motorA_control(cmd.motor_a_speed, cmd.motor_a_direction);
-    motorB_control(cmd.motor_b_speed, cmd.motor_b_direction);
-}
 
 void app_main(void) {
     ESP_LOGI(TAG, "Starting Car OBC Main Application");
@@ -128,6 +163,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "All inits successful.");
     // Holds the full LIDAR scan to be fragmented
     lidar_packet_t current_lidar_scan;
+    static uint8_t scan_id = 0;
 
     // Main loop
     while (1) {
@@ -138,53 +174,69 @@ void app_main(void) {
 
         // Transmission of LIDAR data
         // Check if there is new LIDAR data available in the queue
-        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, (TickType_t)0) == pdPASS) {
+        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS) {
             #ifdef DEBUG
-                ESP_LOGI(TAG, "Processing LIDAR data (%u bytes) for fragmentation and broadcast...", current_lidar_scan.length);
+                ESP_LOGI(TAG,
+                         "Processing LIDAR data (%u bytes) for framing and TX...", (unsigned)current_lidar_scan.length);
             #endif
 
-            const size_t fragment_data_payload_size = 32 - sizeof(uint8_t) - sizeof(bool);
             size_t bytes_sent = 0;
             uint8_t fragment_idx = 0;
 
             while (bytes_sent < current_lidar_scan.length) {
-                nrf_fragment_t nrf_fragment;
-                nrf_fragment.fragment_id = fragment_idx;
+                rf_frame_t f;
+                memset(&f, 0, sizeof(f));
 
-                size_t bytes_to_copy = current_lidar_scan.length - bytes_sent;
-                if (bytes_to_copy > fragment_data_payload_size) {
-                    bytes_to_copy = fragment_data_payload_size;
-                    nrf_fragment.is_last_fragment = false;
-                } else {
-                    nrf_fragment.is_last_fragment = true;
-                }
+                f.magic = 0xA7;
+                f.version = 0x01;
+                f.scan_id = scan_id;
+                f.fragment_id = fragment_idx;
 
-                memcpy(nrf_fragment.fragment_data, current_lidar_scan.data + bytes_sent, bytes_to_copy);
+                size_t remaining = current_lidar_scan.length - bytes_sent;
+                size_t chunk = remaining > sizeof(f.payload) ? sizeof(f.payload)
+                                                             : remaining;
+                f.payload_len = (uint8_t)chunk;
+                memcpy(f.payload,
+                       current_lidar_scan.data + bytes_sent,
+                       chunk);
 
-                // Zero-fill
-                if (bytes_to_copy < fragment_data_payload_size) {
-                    memset(nrf_fragment.fragment_data + bytes_to_copy, 0, fragment_data_payload_size - bytes_to_copy);
-                }
+                bool is_last = (bytes_sent + chunk) >= current_lidar_scan.length;
+                f.flags = is_last ? 0x01 : 0x00;
 
-                #ifdef DEBUG
-                    ESP_LOGD(TAG, "Sending fragment %u (last: %d, bytes: %zu/%zu)", 
-                            nrf_fragment.fragment_id, nrf_fragment.is_last_fragment, bytes_to_copy, fragment_data_payload_size);
-                #endif
+                f.crc = compute_frame_crc(&f);
 
-                esp_err_t nrf_send_err = nrf24_send((const uint8_t *)&nrf_fragment, sizeof(nrf_fragment_t));
+                esp_err_t nrf_send_err = nrf24_send((const uint8_t *)&f, sizeof(f));
                 if (nrf_send_err != ESP_OK) {
-                    ESP_LOGE(TAG, "Failed to broadcast LIDAR fragment %u: %s", fragment_idx, esp_err_to_name(nrf_send_err));
+                    // Clear sticky state and back off a bit
+                    rf24_flush_tx();
+                    vTaskDelay(pdMS_TO_TICKS(3));
+                } else {
+                    // Small pace to keep receiver comfy
+                    vTaskDelay(pdMS_TO_TICKS(2));
+                }
+                if (nrf_send_err != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to broadcast LIDAR fragment %u: %s",
+                             fragment_idx, esp_err_to_name(nrf_send_err));
+                    // Optional: break or retry; we continue to keep pipeline moving
                 }
 
-                bytes_sent += bytes_to_copy;
+                bytes_sent += chunk;
                 fragment_idx++;
+
+                // Small pacing to avoid starving other tasks and to let ACKs flow
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
+
+            if (current_lidar_scan.length > 0) {
+                scan_id++;
+            }
+
             #ifdef DEBUG
                 ESP_LOGI(TAG, "Finished broadcasting LIDAR scan in %u fragments.", fragment_idx);
             #endif
         }
-        
-        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // Keep the loop responsive; drain queue as fast as possible
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 }

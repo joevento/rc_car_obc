@@ -34,6 +34,9 @@ esp_err_t nrf24_send(const uint8_t *data, size_t length);
  */
 esp_err_t nrf24_receive(uint8_t *data, size_t length);
 
+// Hook to deliver ACK payloads (motor commands) up to application
+void nrf24_on_ack_payload(const uint8_t *data, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

@@ -20,7 +20,7 @@ typedef struct {
 
 // Lidar things
 typedef struct {
-    uint8_t data[2048]; 
+    uint8_t data[2048];
     size_t length;
 } lidar_packet_t;
 
@@ -99,6 +99,21 @@ static void debugWheels(void){
     vTaskDelay(pdMS_TO_TICKS(2000));
 }
 
+static motor_command_t last_cmd = {255, 0, 255, 0}; // impossible init to force first apply
+
+void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
+    if (!data || length < sizeof(motor_command_t)) return;
+    motor_command_t cmd;
+    memcpy(&cmd, data, sizeof(cmd));
+    if (memcmp(&cmd, &last_cmd, sizeof(cmd)) == 0) return; // no change, skip
+    last_cmd = cmd;
+    ESP_LOGI(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
+             cmd.motor_a_speed, cmd.motor_a_direction,
+             cmd.motor_b_speed, cmd.motor_b_direction);
+    motorA_control(cmd.motor_a_speed, cmd.motor_a_direction);
+    motorB_control(cmd.motor_b_speed, cmd.motor_b_direction);
+}
+
 void app_main(void) {
     ESP_LOGI(TAG, "Starting Car OBC Main Application");
     #ifdef DEBUG
@@ -111,8 +126,6 @@ void app_main(void) {
     lidar_init_handler();
 
     ESP_LOGI(TAG, "All inits successful.");
-    // Buffer for received motor commands
-    motor_command_t received_command;
     // Holds the full LIDAR scan to be fragmented
     lidar_packet_t current_lidar_scan;
 
@@ -120,20 +133,7 @@ void app_main(void) {
     while (1) {
         // Motor Control Inputs
         #ifdef DEBUG //TODO: in final code remove this ifdef
-            debugWheels();
-        #else
-            esp_err_t recv_ret = nrf24_receive((uint8_t *)&received_command, sizeof(motor_command_t));
-            if (recv_ret == ESP_OK) {
-                ESP_LOGI(TAG, "Received motor command: A_Speed=%u, A_Dir=%d, B_Speed=%u, B_Dir=%d",
-                        received_command.motor_a_speed, received_command.motor_a_direction,
-                        received_command.motor_b_speed, received_command.motor_b_direction);
-
-                // Apply received motor commands
-                motorA_control(received_command.motor_a_speed, received_command.motor_a_direction);
-                motorB_control(received_command.motor_b_speed, received_command.motor_b_direction);
-            } else if (recv_ret != ESP_ERR_NOT_FOUND) {
-                ESP_LOGW(TAG, "Error receiving NRF24 data: %s", esp_err_to_name(recv_ret));
-            }
+            //debugWheels();
         #endif
 
         // Transmission of LIDAR data

@@ -7,7 +7,7 @@
 
 #define NRF24_CE_PIN   21
 #define NRF24_CSN_PIN  5
-#define NRF24_CHANNEL  76 
+#define NRF24_CHANNEL  76
 #define NRF24_PAYLOAD  32
 #define NRF24_DATARATE RF24W_2MBPS
 #define NRF24_POWER RF24W_PA_MAX
@@ -18,7 +18,11 @@ static const char *TAG = "NRF24";
 
 // Probably choose something better but these are fine for now ig
 static const uint8_t TX_ADDRESS[5] = {'0', '0', '0', '0', '1'};
-static const uint8_t RX_ADDRESS[5] = {'0', '0', '0', '0', '2'};
+
+__attribute__((weak)) void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
+    (void)data;
+    (void)length;
+}
 
 esp_err_t nrf24_init(void) {
     ESP_LOGI(TAG, "Initializing radio.");
@@ -26,8 +30,8 @@ esp_err_t nrf24_init(void) {
     ESP_ERROR_CHECK(rf24_init(NRF24_CE_PIN, NRF24_CSN_PIN));
     rf24_stop_listening();
 
-    vTaskDelay(pdMS_TO_TICKS(500));
-    
+    vTaskDelay(pdMS_TO_TICKS(100));
+
     //! Keep in mind that these have to match exactly or shit hits the fan
     rf24_set_channel(NRF24_CHANNEL);
     rf24_set_payload_size(NRF24_PAYLOAD);
@@ -35,9 +39,13 @@ esp_err_t nrf24_init(void) {
     rf24_set_power_level(NRF24_POWER);
     rf24_set_retries(NRF24_RETRYDELAY, NRF24_RETRYCOUNT);
 
-    rf24_open_writing_pipe(TX_ADDRESS);
-    rf24_open_reading_pipe(1, RX_ADDRESS);
+    // Enable dynamic payloads and ACK payloads for bidirectional control in TX-only mode
+    rf24_enable_dynamic_payloads();
+    rf24_enable_ack_payload();
 
+    rf24_open_writing_pipe(TX_ADDRESS);
+
+    // Keep this node in TX mode permanently
     rf24_stop_listening();
 
     #ifdef DEBUG
@@ -48,44 +56,27 @@ esp_err_t nrf24_init(void) {
     return ESP_OK;
 }
 
+// Send and harvest motor command from ACK payload if available
 esp_err_t nrf24_send(const uint8_t *data, size_t length) {
     if (!data || length == 0) return ESP_ERR_INVALID_ARG;
 
-    rf24_stop_listening();
-
-    #ifdef DEBUG
-        ESP_LOGI(TAG, "Transmitting %d bytes...", (int)length);
-    #endif
     esp_err_t ret = rf24_write(data, length);
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Transmission failed: %s", esp_err_to_name(ret));
+        rf24_flush_tx();
+        return ret;
     }
-    #ifdef DEBUG
-        ESP_LOGI(TAG, "Transmission successful.");
-    #endif
 
-    rf24_start_listening();
-    return ret;
+    uint8_t ack_buf[32];
+    if (rf24_is_ack_payload_available()) {
+        if (rf24_read_ack_payload(ack_buf, sizeof(ack_buf)) == ESP_OK) {
+            nrf24_on_ack_payload(ack_buf, sizeof(ack_buf));
+        }
+    }
+    return ESP_OK;
 }
 
 esp_err_t nrf24_receive(uint8_t *data, size_t length) {
+    // Not used in ACK payload approach; keep for compatibility if needed
     if (!data || length == 0) return ESP_ERR_INVALID_ARG;
-
-    rf24_start_listening();
-
-    if (rf24_available() != ESP_OK) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    esp_err_t ret = rf24_read(data, length);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Receiving data failed.");
-    }
-    #ifdef DEBUG
-        ESP_LOGI(TAG, "Received %d bytes successfully", (int)length);
-    #endif
-
-    rf24_stop_listening();
-
-    return ret;
+    return ESP_ERR_NOT_SUPPORTED;
 }

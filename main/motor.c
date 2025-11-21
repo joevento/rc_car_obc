@@ -26,7 +26,10 @@ static const char *TAG = "Motor";
 
 esp_err_t motor_init() {
 	ESP_LOGI(TAG, "Initializing motor driver.");
-	// Configure GPIOs for motor control
+	
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Init gpio for STBY.");
+    #endif
 	gpio_config_t io_conf = {};
 	io_conf.intr_type = GPIO_INTR_DISABLE;
 	io_conf.mode = GPIO_MODE_OUTPUT;
@@ -39,7 +42,13 @@ esp_err_t motor_init() {
 	// Set standby pin high to enable the motor driver
 	ESP_ERROR_CHECK(gpio_set_level(STBY_PIN, 1));
 	ESP_ERROR_CHECK(gpio_config(&io_conf));
+	#ifdef DEBUG
+		ESP_LOGI(TAG, "STBY initialized");
+	#endif
 
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Initializing motor PWM.");
+    #endif
 	// Configure LEDC timer for PWM
 	ledc_timer_config_t ledc_timer = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
@@ -50,6 +59,9 @@ esp_err_t motor_init() {
 	};
 	ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Configuring motor A channel.");
+    #endif
 	ledc_channel_config_t ledc_channel_a = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
 		.channel = motorAChannel,
@@ -61,6 +73,9 @@ esp_err_t motor_init() {
 	};
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel_a));
 
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Configuring motor B channel.");
+    #endif
 	ledc_channel_config_t ledc_channel_b = {
 		.speed_mode = LEDC_LOW_SPEED_MODE,
 		.channel = motorBChannel,
@@ -71,8 +86,11 @@ esp_err_t motor_init() {
 		.hpoint = 0,
 	};
 	ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel_b));
-	
-    ESP_LOGI(TAG, "Motor controller initialized.");
+    #ifdef DEBUG
+        ESP_LOGI(TAG, "Channels configured.");
+    #endif
+
+    ESP_LOGI(TAG, "Controller initialized.");
 	return ESP_OK;
 }
 

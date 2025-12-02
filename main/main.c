@@ -33,10 +33,9 @@ typedef struct {
     uint8_t version;     // 0x01
     uint8_t scan_id;     // increments per full scan
     uint8_t fragment_id; // increments per fragment
-    uint8_t flags;       // bit0: is_last
-    uint8_t payload_len; // 0..24
+    uint8_t payload_len; // 0..25
     uint16_t crc;        // CRC16-CCITT over header-with-zeroed-crc + payload
-    uint8_t payload[24];
+    uint8_t payload[25];
 } __attribute__((packed)) rf_frame_t;
 
 // CRC16-CCITT (poly 0x1021, init 0xFFFF, no reflect, no xorout)
@@ -92,10 +91,9 @@ void lidar_scan_task(void *pvParameters) {
                 ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.", lidar_packet.length);
             #endif
             if (xQueueSend(lidar_data_queue, &lidar_packet, 0) != pdPASS) {
-                // Queue full -> drop newest scan (choose overwrite policy if desired)
-                // lidar_packet_t drop;
-                // xQueueReceive(lidar_data_queue, &drop, 0);
-                // xQueueSend(lidar_data_queue, &lidar_packet, 0);
+                lidar_packet_t drop;
+                xQueueReceive(lidar_data_queue, &drop, 0);
+                xQueueSend(lidar_data_queue, &lidar_packet, 0);
             }
         } else if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error getting lidar scan data: %s", esp_err_to_name(err));
@@ -117,7 +115,7 @@ static void lidar_init_handler(void){
     lidar_init();
     
     // Create a FreeRTOS task for LIDAR scanning
-    // Pin to core 0, as core 1 might be used by Wi-Fi or other critical tasks
+    // Pin to core 0, as core 1 might be used
     xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 4096, NULL, 5, NULL, 0);
 }
 
@@ -200,9 +198,6 @@ void app_main(void) {
                        current_lidar_scan.data + bytes_sent,
                        chunk);
 
-                bool is_last = (bytes_sent + chunk) >= current_lidar_scan.length;
-                f.flags = is_last ? 0x01 : 0x00;
-
                 f.crc = compute_frame_crc(&f);
 
                 esp_err_t nrf_send_err = nrf24_send((const uint8_t *)&f, sizeof(f));
@@ -217,13 +212,11 @@ void app_main(void) {
                 if (nrf_send_err != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to broadcast LIDAR fragment %u: %s",
                              fragment_idx, esp_err_to_name(nrf_send_err));
-                    // Optional: break or retry; we continue to keep pipeline moving
                 }
 
                 bytes_sent += chunk;
                 fragment_idx++;
 
-                // Small pacing to avoid starving other tasks and to let ACKs flow
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
 
@@ -236,7 +229,6 @@ void app_main(void) {
             #endif
         }
 
-        // Keep the loop responsive; drain queue as fast as possible
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 }

@@ -5,6 +5,6 @@
 cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-set(ENABLE_DEBUG OFF CACHE BOOL "Enable debugging mode")
+set(ENABLE_DEBUG ON CACHE BOOL "Enable debugging mode")
 project(rc_car_obc)
 set(EXTRA_COMPONENTS components/rf24)

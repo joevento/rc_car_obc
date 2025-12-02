@@ -56,7 +56,7 @@ esp_err_t nrf24_init(void) {
     return ESP_OK;
 }
 
-// Send and harvest motor command from ACK payload if available
+// Send LIDAR data and harvest motor command from ACK payload if available
 esp_err_t nrf24_send(const uint8_t *data, size_t length) {
     if (!data || length == 0) return ESP_ERR_INVALID_ARG;
 
@@ -76,7 +76,6 @@ esp_err_t nrf24_send(const uint8_t *data, size_t length) {
 }
 
 esp_err_t nrf24_receive(uint8_t *data, size_t length) {
-    // Not used in ACK payload approach; keep for compatibility if needed
     if (!data || length == 0) return ESP_ERR_INVALID_ARG;
     return ESP_ERR_NOT_SUPPORTED;
 }

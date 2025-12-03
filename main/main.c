@@ -80,25 +80,30 @@ void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
     motorB_control(cmd.motor_b_speed, cmd.motor_b_direction);
 }
 
+static lidar_packet_t lidar_scan_buffer;
+
 void lidar_scan_task(void *pvParameters) {
-    lidar_packet_t lidar_packet;
-
     while (1) {
-        esp_err_t err = get_lidar_scan_data(lidar_packet.data, sizeof(lidar_packet.data), &lidar_packet.length);
+        esp_err_t err = get_lidar_scan_data(
+            lidar_scan_buffer.data,
+            sizeof(lidar_scan_buffer.data),
+            &lidar_scan_buffer.length
+        );
 
-        if (err == ESP_OK && lidar_packet.length > 0) {
+        if (err == ESP_OK && lidar_scan_buffer.length > 0) {
             #ifdef DEBUG
-                ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.", lidar_packet.length);
+                ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.",
+                         (unsigned)lidar_scan_buffer.length);
             #endif
-            if (xQueueSend(lidar_data_queue, &lidar_packet, 0) != pdPASS) {
-                lidar_packet_t drop;
-                xQueueReceive(lidar_data_queue, &drop, 0);
-                xQueueSend(lidar_data_queue, &lidar_packet, 0);
+            if (xQueueSend(lidar_data_queue, &lidar_scan_buffer, 0) != pdPASS) {
+                // Drop oldest using the same buffer – no extra 2 kB on stack
+                xQueueReceive(lidar_data_queue, &lidar_scan_buffer, 0);
+                xQueueSend(lidar_data_queue, &lidar_scan_buffer, 0);
             }
         } else if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error getting lidar scan data: %s", esp_err_to_name(err));
         }
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -116,7 +121,7 @@ static void lidar_init_handler(void){
     
     // Create a FreeRTOS task for LIDAR scanning
     // Pin to core 0, as core 1 might be used
-    xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 6144, NULL, 5, NULL, 0);
 }
 
 static void debugWheels(void){
@@ -145,7 +150,7 @@ static void debugWheels(void){
     motorB_control(150, true);
     vTaskDelay(pdMS_TO_TICKS(2000));
 }
-
+static lidar_packet_t current_lidar_scan;
 
 void app_main(void) {
     ESP_LOGI(TAG, "Starting Car OBC Main Application");
@@ -160,7 +165,7 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "All inits successful.");
     // Holds the full LIDAR scan to be fragmented
-    lidar_packet_t current_lidar_scan;
+    //lidar_packet_t current_lidar_scan;
     static uint8_t scan_id = 0;
 
     // Main loop
@@ -201,6 +206,7 @@ void app_main(void) {
                 f.crc = compute_frame_crc(&f);
 
                 esp_err_t nrf_send_err = nrf24_send((const uint8_t *)&f, sizeof(f));
+                //ESP_LOGI(TAG, "magic: %d. version: %d", f.magic, f.version);
                 if (nrf_send_err != ESP_OK) {
                     // Clear sticky state and back off a bit
                     rf24_flush_tx();
@@ -229,6 +235,6 @@ void app_main(void) {
             #endif
         }
 
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }

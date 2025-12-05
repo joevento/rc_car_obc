@@ -72,7 +72,7 @@ void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
     if (memcmp(&cmd, &last_cmd, sizeof(cmd)) == 0) return;
     last_cmd = cmd;
 
-    ESP_LOGI(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
+    ESP_LOGW(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
              cmd.motor_a_speed, cmd.motor_a_direction,
              cmd.motor_b_speed, cmd.motor_b_direction);
 
@@ -168,6 +168,7 @@ void app_main(void) {
     //lidar_packet_t current_lidar_scan;
     static uint8_t scan_id = 0;
 
+    uint16_t errorCount = 0;
     // Main loop
     while (1) {
         // Motor Control Inputs
@@ -177,7 +178,7 @@ void app_main(void) {
 
         // Transmission of LIDAR data
         // Check if there is new LIDAR data available in the queue
-        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS) {
+        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS && errorCount <= 20) {
             #ifdef DEBUG
                 ESP_LOGI(TAG,
                          "Processing LIDAR data (%u bytes) for framing and TX...", (unsigned)current_lidar_scan.length);
@@ -186,7 +187,7 @@ void app_main(void) {
             size_t bytes_sent = 0;
             uint8_t fragment_idx = 0;
 
-            while (bytes_sent < current_lidar_scan.length) {
+            while (bytes_sent < current_lidar_scan.length && errorCount <= 20) {
                 rf_frame_t f;
                 memset(&f, 0, sizeof(f));
 
@@ -211,6 +212,7 @@ void app_main(void) {
                     // Clear sticky state and back off a bit
                     rf24_flush_tx();
                     vTaskDelay(pdMS_TO_TICKS(3));
+                    errorCount += 1;
                 } else {
                     // Small pace to keep receiver comfy
                     vTaskDelay(pdMS_TO_TICKS(2));
@@ -233,6 +235,11 @@ void app_main(void) {
             #ifdef DEBUG
                 ESP_LOGI(TAG, "Finished broadcasting LIDAR scan in %u fragments.", fragment_idx);
             #endif
+        }
+        else if (errorCount >= 20) {
+            motorA_control(0,false);
+            motorB_control(0,false);
+            ESP_LOGE(TAG, "Errored over 20 times entered failsafe state with 0 motor speed set.");
         }
 
         vTaskDelay(pdMS_TO_TICKS(50));

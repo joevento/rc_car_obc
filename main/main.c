@@ -242,6 +242,6 @@ void app_main(void) {
             ESP_LOGE(TAG, "Errored over 20 times entered failsafe state with 0 motor speed set.");
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(75));
     }
 }

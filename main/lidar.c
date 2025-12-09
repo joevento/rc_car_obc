@@ -91,7 +91,7 @@ esp_err_t lidar_init(void) {
     #endif
     set_motor_speed(100);
     ESP_LOGI(TAG, "Waiting for motor to reach constant rotation rate.");
-    vTaskDelay(pdMS_TO_TICKS(2000)); // Critical wait because if the motor isnt spinning at a constant rate the next command fails and im too lazy to make proper code.
+    vTaskDelay(pdMS_TO_TICKS(3000)); // Critical wait because if the motor isnt spinning at a constant rate the next command fails and im too lazy to make proper code.
     #ifdef DEBUG
         ESP_LOGI(TAG, "Motor at constant speed.");
     #endif
@@ -120,7 +120,7 @@ esp_err_t lidar_init(void) {
     TickType_t start_time = xTaskGetTickCount();
 
     while (pattern_idx < 7) {
-        if ((xTaskGetTickCount() - start_time) > pdMS_TO_TICKS(3000)) {
+        if ((xTaskGetTickCount() - start_time) > pdMS_TO_TICKS(4000)) {
             ESP_LOGW(TAG, "Timeout waiting for scan descriptor");
             return ESP_ERR_TIMEOUT;
         }

@@ -78,25 +78,30 @@ void bluetooth_on_motor_command(const uint8_t *data, size_t length) {
     motorB_control(cmd.motor_b_speed, cmd.motor_b_direction);
 }
 
+static lidar_packet_t lidar_scan_buffer;
+
 void lidar_scan_task(void *pvParameters) {
-    lidar_packet_t lidar_packet;
-
     while (1) {
-        esp_err_t err = get_lidar_scan_data(lidar_packet.data, sizeof(lidar_packet.data), &lidar_packet.length);
+        esp_err_t err = get_lidar_scan_data(
+            lidar_scan_buffer.data,
+            sizeof(lidar_scan_buffer.data),
+            &lidar_scan_buffer.length
+        );
 
-        if (err == ESP_OK && lidar_packet.length > 0) {
+        if (err == ESP_OK && lidar_scan_buffer.length > 0) {
             #ifdef DEBUG
-                ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.", lidar_packet.length);
+                ESP_LOGI(TAG, "Lidar Scan Data (%u bytes) acquired. Sending to queue.",
+                         (unsigned)lidar_scan_buffer.length);
             #endif
-            if (xQueueSend(lidar_data_queue, &lidar_packet, 0) != pdPASS) {
-                lidar_packet_t drop;
-                xQueueReceive(lidar_data_queue, &drop, 0);
-                xQueueSend(lidar_data_queue, &lidar_packet, 0);
+            if (xQueueSend(lidar_data_queue, &lidar_scan_buffer, 0) != pdPASS) {
+                // Drop oldest using the same buffer – no extra 2 kB on stack
+                xQueueReceive(lidar_data_queue, &lidar_scan_buffer, 0);
+                xQueueSend(lidar_data_queue, &lidar_scan_buffer, 0);
             }
         } else if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error getting lidar scan data: %s", esp_err_to_name(err));
         }
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -114,7 +119,7 @@ static void lidar_init_handler(void){
     
     // Create a FreeRTOS task for LIDAR scanning
     // Pin to core 0, as core 1 might be used
-    xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 6144, NULL, 5, NULL, 0);
 }
 
 void app_main(void) {
@@ -140,6 +145,7 @@ void app_main(void) {
     lidar_packet_t current_lidar_scan;
     static uint8_t scan_id = 0;
 
+    uint16_t errorCount = 0;
     // Main loop
     while (1) {
         if (!bluetooth_is_connected()) {
@@ -150,7 +156,9 @@ void app_main(void) {
             ESP_LOGI(TAG, "Bluetooth reconnected.");
         }
 
-        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS) {
+        // Transmission of LIDAR data
+        // Check if there is new LIDAR data available in the queue
+        if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS && errorCount <= 20) {
             #ifdef DEBUG
                 ESP_LOGI(TAG,
                          "Processing LIDAR data (%u bytes) for framing and TX...", (unsigned)current_lidar_scan.length);
@@ -159,7 +167,7 @@ void app_main(void) {
             size_t bytes_sent = 0;
             uint8_t fragment_idx = 0;
 
-            while (bytes_sent < current_lidar_scan.length) {
+            while (bytes_sent < current_lidar_scan.length && errorCount <= 20) {
                 rf_frame_t f;
                 memset(&f, 0, sizeof(f));
 
@@ -182,6 +190,7 @@ void app_main(void) {
                 if (bt_send_err != ESP_OK) {
                     // Clear sticky state and back off a bit
                     vTaskDelay(pdMS_TO_TICKS(3));
+                    errorCount += 1;
                 } else {
                     // Small pace to keep receiver comfy
                     vTaskDelay(pdMS_TO_TICKS(2));
@@ -204,6 +213,11 @@ void app_main(void) {
             #ifdef DEBUG
                 ESP_LOGI(TAG, "Finished broadcasting LIDAR scan in %u fragments.", fragment_idx);
             #endif
+        }
+        else if (errorCount >= 20) {
+            motorA_control(0,false);
+            motorB_control(0,false);
+            ESP_LOGE(TAG, "Errored over 20 times entered failsafe state with 0 motor speed set.");
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));

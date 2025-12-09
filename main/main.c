@@ -119,34 +119,6 @@ static void lidar_init_handler(void){
     xTaskCreatePinnedToCore(lidar_scan_task, "LidarScanTask", 4096, NULL, 5, NULL, 0);
 }
 
-static void debugWheels(void){
-    ESP_LOGI(TAG, "Motor A Forward, Motor B Forward");
-    motorA_control(300, true);
-    motorB_control(300, true);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    ESP_LOGI(TAG, "Motor A Reverse, Motor B Reverse");
-    motorA_control(300, false);
-    motorB_control(300, false);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    ESP_LOGI(TAG, "Motor A Stop, Motor B Stop");
-    motorA_control(0, true);
-    motorB_control(0, true);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    ESP_LOGI(TAG, "Motor A Forward, Motor B Reverse");
-    motorA_control(150, true);
-    motorB_control(150, false);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    ESP_LOGI(TAG, "Motor A Reverse, Motor B Forward");
-    motorA_control(150, false);
-    motorB_control(150, true);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-}
-
-
 void app_main(void) {
     ESP_LOGI(TAG, "Starting Car OBC Main Application");
     #ifdef DEBUG

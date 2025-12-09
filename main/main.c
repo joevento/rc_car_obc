@@ -5,8 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lidar.h"
-#include "nrf24_comm.h"
-#include "rf24_wrapper.h"
+#include "bluetooth_comm.h"
 #include "motor.h"
 
 static const char *TAG = "OBC_MAIN";
@@ -61,8 +60,7 @@ static uint16_t compute_frame_crc(const rf_frame_t *fr) {
     return crc16_ccitt((const uint8_t *)&tmp, len);
 }
 
-// Hook: apply ACK-payload motor commands when they arrive from the receiver
-void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
+void bluetooth_on_motor_command(const uint8_t *data, size_t length) {
     if (!data || length < sizeof(motor_command_t)) return;
 
     static motor_command_t last_cmd = {255, 0, 255, 0};
@@ -72,7 +70,7 @@ void nrf24_on_ack_payload(const uint8_t *data, size_t length) {
     if (memcmp(&cmd, &last_cmd, sizeof(cmd)) == 0) return;
     last_cmd = cmd;
 
-    ESP_LOGI(TAG, "ACK motor cmd: A=%u dir=%d, B=%u dir=%d",
+    ESP_LOGI(TAG, "Motor cmd: A=%u dir=%d, B=%u dir=%d",
              cmd.motor_a_speed, cmd.motor_a_direction,
              cmd.motor_b_speed, cmd.motor_b_direction);
 
@@ -127,23 +125,31 @@ void app_main(void) {
 
     // Inits:
     motor_init();
-    nrf24_init();
+    bluetooth_init();
     lidar_init_handler();
 
     ESP_LOGI(TAG, "All inits successful.");
+    
+    ESP_LOGI(TAG, "Waiting for Bluetooth connection...");
+    while (!bluetooth_is_connected()) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    ESP_LOGI(TAG, "Bluetooth connected. Starting data transmission.");
+
     // Holds the full LIDAR scan to be fragmented
     lidar_packet_t current_lidar_scan;
     static uint8_t scan_id = 0;
 
     // Main loop
     while (1) {
-        // Motor Control Inputs
-        #ifdef DEBUG //TODO: in final code remove this ifdef
-            //debugWheels();
-        #endif
+        if (!bluetooth_is_connected()) {
+            ESP_LOGW(TAG, "Bluetooth disconnected. Waiting for reconnection...");
+            while (!bluetooth_is_connected()) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+            ESP_LOGI(TAG, "Bluetooth reconnected.");
+        }
 
-        // Transmission of LIDAR data
-        // Check if there is new LIDAR data available in the queue
         if (xQueueReceive(lidar_data_queue, &current_lidar_scan, 0) == pdPASS) {
             #ifdef DEBUG
                 ESP_LOGI(TAG,
@@ -172,18 +178,17 @@ void app_main(void) {
 
                 f.crc = compute_frame_crc(&f);
 
-                esp_err_t nrf_send_err = nrf24_send((const uint8_t *)&f, sizeof(f));
-                if (nrf_send_err != ESP_OK) {
+                esp_err_t bt_send_err = bluetooth_send((const uint8_t *)&f, sizeof(f));
+                if (bt_send_err != ESP_OK) {
                     // Clear sticky state and back off a bit
-                    rf24_flush_tx();
                     vTaskDelay(pdMS_TO_TICKS(3));
                 } else {
                     // Small pace to keep receiver comfy
                     vTaskDelay(pdMS_TO_TICKS(2));
                 }
-                if (nrf_send_err != ESP_OK) {
+                if (bt_send_err != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to broadcast LIDAR fragment %u: %s",
-                             fragment_idx, esp_err_to_name(nrf_send_err));
+                             fragment_idx, esp_err_to_name(bt_send_err));
                 }
 
                 bytes_sent += chunk;
@@ -201,6 +206,6 @@ void app_main(void) {
             #endif
         }
 
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

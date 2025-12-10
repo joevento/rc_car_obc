@@ -101,7 +101,7 @@ void lidar_scan_task(void *pvParameters) {
         } else if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error getting lidar scan data: %s", esp_err_to_name(err));
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -190,11 +190,8 @@ void app_main(void) {
                 esp_err_t bt_send_err = bluetooth_send((const uint8_t *)&f, sizeof(f));
                 if (bt_send_err != ESP_OK) {
                     // Clear sticky state and back off a bit
-                    vTaskDelay(pdMS_TO_TICKS(3));
+                    //vTaskDelay(pdMS_TO_TICKS(3));
                     errorCount += 1;
-                } else {
-                    // Small pace to keep receiver comfy
-                    vTaskDelay(pdMS_TO_TICKS(2));
                 }
                 if (bt_send_err != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to broadcast LIDAR fragment %u: %s",
@@ -204,7 +201,7 @@ void app_main(void) {
                 bytes_sent += chunk;
                 fragment_idx++;
 
-                vTaskDelay(pdMS_TO_TICKS(1));
+                //vTaskDelay(pdMS_TO_TICKS(1));
             }
 
             if (current_lidar_scan.length > 0) {
@@ -221,6 +218,6 @@ void app_main(void) {
             ESP_LOGE(TAG, "Errored over 20 times entered failsafe state with 0 motor speed set.");
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

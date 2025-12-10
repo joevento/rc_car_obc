@@ -6,6 +6,7 @@
 #include "esp_gap_bt_api.h"
 #include "esp_spp_api.h"
 #include "bluetooth_comm.h"
+#include "nvs_flash.h"
 
 #define SPP_SERVER_NAME "ESP32_OBC"
 #define DEVICE_NAME "ESP32_Car"
@@ -55,6 +56,10 @@ static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
             ESP_LOGW(TAG, "Congestion %s", param->cong.cong ? "start" : "end");
             break;
 
+        case ESP_SPP_START_EVT:
+            ESP_LOGI(TAG, "SPP server started on channel %d", param->start.scn);
+            break;
+
         case ESP_SPP_WRITE_EVT:
             break;
 
@@ -78,10 +83,17 @@ esp_err_t bluetooth_init(void) {
     ESP_LOGI(TAG, "Initializing Bluetooth.");
 
     esp_err_t ret;
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Controller init failed: %s", esp_err_to_name(ret));

@@ -120,7 +120,7 @@ esp_err_t lidar_init(void) {
     TickType_t start_time = xTaskGetTickCount();
 
     while (pattern_idx < 7) {
-        if ((xTaskGetTickCount() - start_time) > pdMS_TO_TICKS(4000)) {
+        if ((xTaskGetTickCount() - start_time) > pdMS_TO_TICKS(10000)) {
             ESP_LOGW(TAG, "Timeout waiting for scan descriptor");
             return ESP_ERR_TIMEOUT;
         }

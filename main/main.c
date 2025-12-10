@@ -131,6 +131,7 @@ void app_main(void) {
     // Inits:
     motor_init();
     bluetooth_init();
+    vTaskDelay(pdMS_TO_TICKS(2000));
     lidar_init_handler();
 
     ESP_LOGI(TAG, "All inits successful.");
